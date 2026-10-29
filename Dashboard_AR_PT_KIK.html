@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive AR Monitoring Dashboard - PT KIK</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-12">
+
+    <!-- Header Admin -->
+    <header class="bg-slate-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-wide">📊 Executive AR Dashboard</h1>
+                <p class="text-xs text-slate-400">PT Kalla Inti Karsa (PT KIK) — Accounts Receivable Monitoring [Admin Control]</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <label for="excelUpdateInput" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow transition flex items-center gap-2">
+                    📂 Upload / Update File Excel
+                </label>
+                <input type="file" id="excelUpdateInput" accept=".xlsx, .xls, .xlsm" class="hidden" onchange="handleNewDataUpload(event)">
+                
+                <button id="resetFilterBtn" class="hidden bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold px-3 py-2.5 rounded-lg transition" onclick="resetFilter()">
+                    ↺ Reset Filter
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 mt-6 space-y-6">
+
+        <!-- Status Banner -->
+        <div id="statusBanner" class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-lg shadow-sm flex justify-between items-center">
+            <div>
+                <p id="statusTitle" class="text-sm font-bold text-emerald-900">✅ Mode Admin Aktif</p>
+                <p id="statusDesc" class="text-xs text-emerald-700 mt-0.5">Rincian Berelasi & Non-Relasi per Unit Bisnis kini telah ditambahkan ke dalam kartu.</p>
+            </div>
+            <span id="dataCountBadge" class="bg-emerald-200 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">Siap Digunakan</span>
+        </div>
+
+        <!-- 1. KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total AR Keseluruhan</p>
+                <h3 id="kpiTotalAR" class="text-2xl font-bold text-slate-900 mt-2">Rp 0</h3>
+                <p class="text-xs text-slate-400 mt-1">Kolom M (Total Piutang)</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-emerald-400 transition" onclick="filterByRelasi('Berelasi')">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">AR Berelasi</p>
+                <div class="flex items-baseline justify-between mt-2">
+                    <h3 id="kpiBerelasi" class="text-xl font-bold text-emerald-600">Rp 0</h3>
+                    <span id="pctBerelasi" class="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">0%</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Klik untuk filter (Kolom E)</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-400 transition" onclick="filterByRelasi('Non-Relasi')">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">AR Non-Relasi</p>
+                <div class="flex items-baseline justify-between mt-2">
+                    <h3 id="kpiNonRelasi" class="text-xl font-bold text-indigo-600">Rp 0</h3>
+                    <span id="pctNonRelasi" class="text-xs font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">0%</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Klik untuk filter (Kolom E)</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Invois / Tenant</p>
+                <h3 id="kpiTotalTenant" class="text-2xl font-bold text-slate-900 mt-2">0</h3>
+                <p class="text-xs text-slate-400 mt-1">Baris Data Valid</p>
+            </div>
+        </div>
+
+        <!-- 2. Breakdown per Unit dengan Rincian Berelasi & Non-Relasi -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h3 class="text-base font-bold text-slate-800 mb-4">📍 Breakdown AR per Unit Bisnis (Dilengkapi Rincian Berelasi & Non-Relasi)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="unitCardsContainer"></div>
+        </div>
+
+        <!-- 3. Chart & Aging -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <h3 class="text-base font-bold text-slate-800 mb-2">📈 Komposisi Relasi vs Non-Relasi</h3>
+                <div class="relative h-64 flex items-center justify-center">
+                    <canvas id="relasiChart"></canvas>
+                </div>
+            </div>
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <h3 class="text-base font-bold text-slate-800 mb-2">⏱️ Kategori Aging Piutang (Klik untuk Rincian)</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2" id="agingCardsContainer"></div>
+            </div>
+        </div>
+
+        <!-- 4. Data Table -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div>
+                    <h3 id="tableTitle" class="text-base font-bold text-slate-800">📋 Rincian Data AR (Semua Data)</h3>
+                    <p id="tableSubTitle" class="text-xs text-slate-500">Menampilkan rincian tenant berdasarkan kolom A–S.</p>
+                </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <input type="text" id="searchInput" placeholder="Cari tenant / invois / produk..." class="w-full sm:w-64 text-sm border border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="applySearch()">
+                </div>
+            </div>
+            <div class="overflow-x-auto max-h-[500px]">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-50 text-slate-600 uppercase text-xs sticky top-0 border-b border-slate-200">
+                        <tr>
+                            <th class="p-3">No</th>
+                            <th class="p-3">Unit Bisnis (B)</th>
+                            <th class="p-3">Nama Tenant (C)</th>
+                            <th class="p-3">No Invoice (H)</th>
+                            <th class="p-3">Kategori AR (E)</th>
+                            <th class="p-3">Produk (D)</th>
+                            <th class="p-3 text-right">Total Piutang (M)</th>
+                            <th class="p-3 text-center">1-30 Hari (P)</th>
+                            <th class="p-3 text-center">31-60 Hari (Q)</th>
+                            <th class="p-3 text-center">61-90 Hari (R)</th>
+                            <th class="p-3 text-center">&gt;91 Hari (S)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="divide-y divide-slate-200 text-sm text-slate-700"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let rawData = [
+            { no: 1, unit: "MARI", tenant: "PT ALFA FASHION", inv: "INV/MARI/2026/001", relasi: "Berelasi", relasiFull: "Piutang Usaha - Berelasi", produk: "Exhibition", total: 45000000, a1_30: 15000000, a31_60: 30000000, a61_90: 0, a90plus: 0 },
+            { no: 2, unit: "NIPAH", tenant: "CV BETA KULINER", inv: "INV/NIPAH/2026/002", relasi: "Non-Relasi", relasiFull: "Piutang Usaha - Non Relasi", produk: "Sewa Tempat", total: 75000000, a1_30: 0, a31_60: 25000000, a61_90: 50000000, a90plus: 0 },
+            { no: 3, unit: "WISMA KALLA", tenant: "PT GAMMA TEKNOLOGI", inv: "INV/WK/2026/003", relasi: "Berelasi", relasiFull: "Piutang Usaha - Berelasi", produk: "Service Charge", total: 120000000, a1_30: 20000000, a31_60: 0, a61_90: 0, a90plus: 100000000 },
+            { no: 4, unit: "WISMA KALLA - HSI", tenant: "CV DELTA MANDIRI", inv: "INV/WKHSI/2026/004", relasi: "Non-Relasi", relasiFull: "Piutang Usaha - Non Relasi", produk: "Utilitas", total: 30000000, a1_30: 10000000, a31_60: 10000000, a61_90: 10000000, a90plus: 0 }
+        ];
+
+        let filteredData = [...rawData];
+        let relasiChartInstance = null;
+        const targetUnits = ["MARI", "NIPAH", "WISMA KALLA", "WISMA KALLA - HSI"];
+
+        window.addEventListener('DOMContentLoaded', () => { updateDashboard(); });
+
+        function formatIDR(num) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num || 0);
+        }
+
+        function updateDashboard() {
+            const totalAR = filteredData.reduce((acc, curr) => acc + curr.total, 0);
+            document.getElementById('kpiTotalAR').innerText = formatIDR(totalAR);
+            document.getElementById('kpiTotalTenant').innerText = filteredData.length;
+
+            const totalBerelasi = filteredData.filter(d => d.relasi === 'Berelasi').reduce((acc, curr) => acc + curr.total, 0);
+            const totalNonRelasi = filteredData.filter(d => d.relasi === 'Non-Relasi').reduce((acc, curr) => acc + curr.total, 0);
+
+            document.getElementById('kpiBerelasi').innerText = formatIDR(totalBerelasi);
+            document.getElementById('pctBerelasi').innerText = totalAR > 0 ? ((totalBerelasi / totalAR) * 100).toFixed(1) + '%' : '0%';
+
+            document.getElementById('kpiNonRelasi').innerText = formatIDR(totalNonRelasi);
+            document.getElementById('pctNonRelasi').innerText = totalAR > 0 ? ((totalNonRelasi / totalAR) * 100).toFixed(1) + '%' : '0%';
+
+            // Render Unit Cards dengan Rincian Berelasi & Non-Relasi
+            const unitContainer = document.getElementById('unitCardsContainer');
+            unitContainer.innerHTML = '';
+            targetUnits.forEach(unitName => {
+                const unitRows = filteredData.filter(d => d.unit === unitName);
+                const unitTotal = unitRows.reduce((acc, curr) => acc + curr.total, 0);
+                const unitPct = totalAR > 0 ? ((unitTotal / totalAR) * 100).toFixed(1) : 0;
+
+                // Hitung Berelasi & Non-Relasi per Unit
+                const unitBerelasi = unitRows.filter(d => d.relasi === 'Berelasi').reduce((acc, curr) => acc + curr.total, 0);
+                const unitNonRelasi = unitRows.filter(d => d.relasi === 'Non-Relasi').reduce((acc, curr) => acc + curr.total, 0);
+
+                unitContainer.innerHTML += `
+                    <div class="bg-slate-50 hover:bg-blue-50/50 p-4 rounded-xl border border-slate-200 cursor-pointer transition flex flex-col justify-between" onclick="filterByUnit('${unitName}')">
+                        <div>
+                            <div class="flex justify-between items-start">
+                                <span class="text-xs font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">${unitName}</span>
+                                <span class="text-xs font-bold text-blue-600">${unitPct}% dari Total</span>
+                            </div>
+                            <h4 class="text-lg font-bold text-slate-900 mt-2">${formatIDR(unitTotal)}</h4>
+                            <p class="text-xs text-slate-500 mb-3">${unitRows.length} Tenant / Invois</p>
+                        </div>
+                        <div class="border-t border-slate-200 pt-2 space-y-1 text-xs">
+                            <div class="flex justify-between text-emerald-700 font-medium">
+                                <span>🟢 Berelasi:</span>
+                                <span class="font-bold">${formatIDR(unitBerelasi)}</span>
+                            </div>
+                            <div class="flex justify-between text-indigo-700 font-medium">
+                                <span>🔵 Non-Relasi:</span>
+                                <span class="font-bold">${formatIDR(unitNonRelasi)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const sum1_30 = filteredData.reduce((acc, curr) => acc + curr.a1_30, 0);
+            const sum31_60 = filteredData.reduce((acc, curr) => acc + curr.a31_60, 0);
+            const sum61_90 = filteredData.reduce((acc, curr) => acc + curr.a61_90, 0);
+            const sum90plus = filteredData.reduce((acc, curr) => acc + curr.a90plus, 0);
+
+            const agingContainer = document.getElementById('agingCardsContainer');
+            agingContainer.innerHTML = `
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 cursor-pointer hover:border-amber-400 transition" onclick="filterByAging('1-30')">
+                    <p class="text-xs font-semibold text-slate-500">1 - 30 HARI</p>
+                    <h4 class="text-lg font-bold text-slate-900 mt-1">${formatIDR(sum1_30)}</h4>
+                    <p class="text-xs text-slate-400 mt-1">${totalAR > 0 ? ((sum1_30/totalAR)*100).toFixed(1) : 0}% dari Total AR</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 cursor-pointer hover:border-amber-400 transition" onclick="filterByAging('31-60')">
+                    <p class="text-xs font-semibold text-slate-500">31 - 60 HARI</p>
+                    <h4 class="text-lg font-bold text-slate-900 mt-1">${formatIDR(sum31_60)}</h4>
+                    <p class="text-xs text-slate-400 mt-1">${totalAR > 0 ? ((sum31_60/totalAR)*100).toFixed(1) : 0}% dari Total AR</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 cursor-pointer hover:border-amber-400 transition" onclick="filterByAging('61-90')">
+                    <p class="text-xs font-semibold text-slate-500">61 - 90 HARI</p>
+                    <h4 class="text-lg font-bold text-slate-900 mt-1">${formatIDR(sum61_90)}</h4>
+                    <p class="text-xs text-slate-400 mt-1">${totalAR > 0 ? ((sum61_90/totalAR)*100).toFixed(1) : 0}% dari Total AR</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 cursor-pointer hover:border-rose-400 transition" onclick="filterByAging('90plus')">
+                    <p class="text-xs font-semibold text-rose-600 font-bold">&gt;91 HARI</p>
+                    <h4 class="text-lg font-bold text-rose-600 mt-1">${formatIDR(sum90plus)}</h4>
+                    <p class="text-xs text-slate-400 mt-1">${totalAR > 0 ? ((sum90plus/totalAR)*100).toFixed(1) : 0}% dari Total AR</p>
+                </div>
+            `;
+
+            updateChart(totalBerelasi, totalNonRelasi);
+            updateTable();
+        }
+
+        function updateChart(berelasi, nonRelasi) {
+            const ctx = document.getElementById('relasiChart').getContext('2d');
+            if (relasiChartInstance) relasiChartInstance.destroy();
+
+            relasiChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['AR Berelasi', 'AR Non-Relasi'],
+                    datasets: [{
+                        data: [berelasi, nonRelasi],
+                        backgroundColor: ['#10b981', '#6366f1'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-slate-400">Tidak ada data yang sesuai dengan filter.</td></tr>`;
+                return;
+            }
+            const renderLimit = Math.min(filteredData.length, 500);
+            for (let idx = 0; idx < renderLimit; idx++) {
+                const row = filteredData[idx];
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 text-slate-500">${idx + 1}</td>
+                        <td class="p-3 font-semibold text-slate-800">${row.unit}</td>
+                        <td class="p-3 font-medium text-slate-900">${row.tenant}</td>
+                        <td class="p-3 text-xs font-mono text-slate-600">${row.inv}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 text-xs rounded-full ${row.relasi === 'Berelasi' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}">${row.relasiFull || row.relasi}</span></td>
+                        <td class="p-3 text-slate-600">${row.produk}</td>
+                        <td class="p-3 text-right font-bold text-slate-900">${formatIDR(row.total)}</td>
+                        <td class="p-3 text-center text-slate-600">${formatIDR(row.a1_30)}</td>
+                        <td class="p-3 text-center text-slate-600">${formatIDR(row.a31_60)}</td>
+                        <td class="p-3 text-center text-slate-600">${formatIDR(row.a61_90)}</td>
+                        <td class="p-3 text-center font-semibold text-rose-600">${formatIDR(row.a90plus)}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        function filterByUnit(unitName) {
+            filteredData = rawData.filter(d => d.unit === unitName);
+            document.getElementById('tableTitle').innerText = `📋 Rincian Data AR — Unit: ${unitName}`;
+            document.getElementById('resetFilterBtn').classList.remove('hidden');
+            updateTable();
+        }
+
+        function filterByRelasi(relasiType) {
+            filteredData = rawData.filter(d => d.relasi === relasiType);
+            document.getElementById('tableTitle').innerText = `📋 Rincian Data AR — Kategori: ${relasiType}`;
+            document.getElementById('resetFilterBtn').classList.remove('hidden');
+            updateTable();
+        }
+
+        function filterByAging(agingType) {
+            if (agingType === '1-30') filteredData = rawData.filter(d => d.a1_30 > 0);
+            else if (agingType === '31-60') filteredData = rawData.filter(d => d.a31_60 > 0);
+            else if (agingType === '61-90') filteredData = rawData.filter(d => d.a61_90 > 0);
+            else if (agingType === '90plus') filteredData = rawData.filter(d => d.a90plus > 0);
+
+            document.getElementById('tableTitle').innerText = `📋 Rincian Data AR — Aging: ${agingType} Hari`;
+            document.getElementById('resetFilterBtn').classList.remove('hidden');
+            updateTable();
+        }
+
+        function resetFilter() {
+            filteredData = [...rawData];
+            document.getElementById('tableTitle').innerText = `📋 Rincian Data AR (Semua Data)`;
+            document.getElementById('resetFilterBtn').classList.add('hidden');
+            document.getElementById('searchInput').value = '';
+            updateDashboard();
+        }
+
+        function applySearch() {
+            const keyword = document.getElementById('searchInput').value.toLowerCase();
+            filteredData = rawData.filter(d => 
+                d.tenant.toLowerCase().includes(keyword) || 
+                d.inv.toLowerCase().includes(keyword) || 
+                d.unit.toLowerCase().includes(keyword) ||
+                d.produk.toLowerCase().includes(keyword)
+            );
+            updateTable();
+        }
+
+        function handleNewDataUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                let newParsedData = [];
+                const maxRow = Math.min(json.length, 10000);
+                for (let i = 1; i < maxRow; i++) {
+                    const r = json[i];
+                    if (!r || r.length === 0) continue;
+                    const tenantRaw = String(r[2] || "").trim();
+                    if (!tenantRaw || tenantRaw.toUpperCase().includes("NAMA TENANT")) continue;
+
+                    const unitRaw = String(r[1] || "").trim();
+                    const produkRaw = String(r[3] || "-").trim();
+                    const relasiRaw = String(r[4] || "-").trim();
+                    const invRaw = String(r[7] || "-").trim();
+                    const totalVal = parseFloat(r[12]) || 0;
+                    const a1 = parseFloat(r[15]) || 0;
+                    const a2 = parseFloat(r[16]) || 0;
+                    const a3 = parseFloat(r[17]) || 0;
+                    const a4 = parseFloat(r[18]) || 0;
+
+                    let cleanUnit = "Lainnya";
+                    const uUpper = unitRaw.toUpperCase();
+                    if (uUpper.includes("MARI")) cleanUnit = "MARI";
+                    else if (uUpper.includes("NIPAH")) cleanUnit = "NIPAH";
+                    else if (uUpper.includes("HSI")) cleanUnit = "WISMA KALLA - HSI";
+                    else if (uUpper.includes("WISMA") || uUpper.includes("WK")) cleanUnit = "WISMA KALLA";
+
+                    let isRelasi = "Non-Relasi";
+                    if (relasiRaw.toLowerCase().includes("berelasi") || relasiRaw.toLowerCase().includes("relasi")) {
+                        if (!relasiRaw.toLowerCase().includes("non")) isRelasi = "Berelasi";
+                    }
+
+                    newParsedData.push({
+                        no: newParsedData.length + 1,
+                        unit: cleanUnit,
+                        tenant: tenantRaw,
+                        inv: invRaw,
+                        relasi: isRelasi,
+                        relasiFull: relasiRaw,
+                        produk: produkRaw,
+                        total: totalVal > 0 ? totalVal : (a1 + a2 + a3 + a4),
+                        a1_30: a1,
+                        a31_60: a2,
+                        a61_90: a3,
+                        a90plus: a4
+                    });
+                }
+
+                if (newParsedData.length > 0) {
+                    rawData = newParsedData;
+                    filteredData = [...rawData];
+                    updateDashboard();
+                    alert(`Berhasil! Data AR sebanyak ${rawData.length} baris telah dimuat ke dashboard.`);
+                } else {
+                    alert("Gagal membaca data. Pastikan format kolom Excel sesuai.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
