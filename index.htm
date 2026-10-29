@@ -397,6 +397,62 @@
             };
             reader.readAsArrayBuffer(file);
         }
+        // Auto-load file Excel dari repository GitHub saat halaman pertama kali dibuka
+window.addEventListener('DOMContentLoaded', () => {
+    fetch('UPLOAD%20DASHBOARD%20MONITORING%20AR%20PT.KIK%20FIX.xlsx')
+        .then(response => response.arrayBuffer())
+        .then(buffer => {
+            let data = new Uint8Array(buffer);
+            let workbook = XLSX.read(data, {type: 'array'});
+            let firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            let rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+            
+            // Memproses data otomatis ke dalam dashboard
+            let newParsedData = [];
+            for(let i = 1; i < rows.length; i++) {
+                let r = rows[i];
+                if(!r || r.length === 0) continue;
+                // Sesuaikan struktur pembacaan baris data Anda
+                let tenantRaw = r[2] || "-";
+                let invRaw = r[3] || "-";
+                let relasiRaw = String(r[4] || "");
+                let uUpper = String(r[1] || "").toUpperCase();
+                let a1 = parseFloat(r[5]) || 0;
+                let a2 = parseFloat(r[6]) || 0;
+                let a3 = parseFloat(r[7]) || 0;
+                let a4 = parseFloat(r[8]) || 0;
+                let totalVal = parseFloat(r[12]) || (a1 + a2 + a3 + a4);
+
+                let cleanUnit = "MARI";
+                if(uUpper.includes("NIPAH")) cleanUnit = "NIPAH";
+                else if(uUpper.includes("HSI")) cleanUnit = "WISMA KALLA - HSI";
+                else if(uUpper.includes("WISMA") || uUpper.includes("WK")) cleanUnit = "WISMA KALLA";
+
+                let isRelasi = "Non-Relasi";
+                if(relasiRaw.toLowerCase().includes("berelasi") || relasiRaw.toLowerCase().includes("relasi")) {
+                    if(!relasiRaw.toLowerCase().includes("non")) isRelasi = "Berelasi";
+                }
+
+                newParsedData.push({
+                    no: newParsedData.length + 1,
+                    unit: cleanUnit,
+                    tenant: tenantRaw,
+                    inv: invRaw,
+                    relasi: isRelasi,
+                    relasifull: relasiRaw,
+                    total: totalVal > 0 ? totalVal : (a1 + a2 + a3 + a4),
+                    a1_30: a1, a31_60: a2, a61_90: a3, a90plus: a4
+                });
+            }
+
+            if(newParsedData.length > 0) {
+                rawDate = newParsedData;
+                filteredData = [...rawDate];
+                updateDashboard();
+            }
+        })
+        .catch(err => console.log("Auto-load file Excel: Menunggu upload manual jika file belum ada."));
+});
     </script>
 </body>
 </html>
